@@ -1,22 +1,11 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings, Key, Link2, Database, CheckCircle2, XCircle, RefreshCw, Loader2 } from "lucide-react";
+import { Settings, Database, CheckCircle2, XCircle, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import {
-  JotFormAPI,
-  JotFormForm,
-  FormConfig,
-  saveApiKey,
-  getApiKey,
-  clearApiKey,
-  getFormsConfig,
-  updateFormConfig,
-} from "@/lib/jotform";
+import { JotFormForm } from "@/lib/jotform";
 import { syncJotFormSubmissions, FormType, saveFormMapping, getFormMappings } from "@/lib/jotformSync";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Select,
   SelectContent,
@@ -36,125 +25,61 @@ import { Badge } from "@/components/ui/badge";
 
 const Configuracoes = () => {
   const { toast } = useToast();
-  const [apiKey, setApiKey] = useState("");
-  const [savedApiKey, setSavedApiKey] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isFetchingForms, setIsFetchingForms] = useState(false);
   const [forms, setForms] = useState<JotFormForm[]>([]);
-  const [formsConfig, setFormsConfig] = useState<FormConfig[]>([]);
   const [syncingFormId, setSyncingFormId] = useState<string | null>(null);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
   const [formTypeMappings, setFormTypeMappings] = useState<Record<string, FormType>>({});
 
-  // Load saved API key and form mappings on mount
+  // Check connection and load forms on mount
   useEffect(() => {
-    const saved = getApiKey();
-    if (saved) {
-      setSavedApiKey(saved);
-      setApiKey(saved);
-      checkConnection(saved);
-    }
-    setFormsConfig(getFormsConfig());
+    checkConnection();
     setFormTypeMappings(getFormMappings());
   }, []);
 
-  const checkConnection = async (key: string) => {
-    try {
-      const api = new JotFormAPI(key);
-      const connected = await api.testConnection();
-      setIsConnected(connected);
-      if (connected) {
-        await fetchForms(key);
-      }
-    } catch (error) {
-      setIsConnected(false);
-    }
-  };
-
-  const handleSaveApiKey = () => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "Erro",
-        description: "Por favor, insira uma API Key válida",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      saveApiKey(apiKey.trim());
-      setSavedApiKey(apiKey.trim());
-      toast({
-        title: "Sucesso",
-        description: "API Key salva com sucesso",
-      });
-    } catch (error) {
-      toast({
-        title: "Erro",
-        description: "Falha ao salvar API Key",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleTestConnection = async () => {
-    if (!apiKey.trim()) {
-      toast({
-        title: "Erro",
-        description: "Por favor, insira uma API Key",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const checkConnection = async () => {
     setIsTestingConnection(true);
     try {
-      const api = new JotFormAPI(apiKey.trim());
-      const connected = await api.testConnection();
+      const { data, error } = await supabase.functions.invoke('test-jotform-connection');
       
+      if (error) throw error;
+      
+      const connected = data?.connected || false;
       setIsConnected(connected);
       
       if (connected) {
-        toast({
-          title: "Conexão bem-sucedida! 🎉",
-          description: "API Key válida. Buscando formulários...",
-        });
-        await fetchForms(apiKey.trim());
-      } else {
-        toast({
-          title: "Falha na conexão",
-          description: "API Key inválida. Verifique e tente novamente.",
-          variant: "destructive",
-        });
+        await fetchForms();
       }
     } catch (error) {
+      console.error('Connection test failed:', error);
+      setIsConnected(false);
       toast({
         title: "Erro",
-        description: "Não foi possível conectar ao JotForm",
+        description: "Não foi possível conectar ao JotForm. Verifique se o secret JOTFORM está configurado.",
         variant: "destructive",
       });
-      setIsConnected(false);
     } finally {
       setIsTestingConnection(false);
     }
   };
 
-  const fetchForms = async (key: string) => {
+  const fetchForms = async () => {
     setIsFetchingForms(true);
     try {
-      const api = new JotFormAPI(key);
-      const fetchedForms = await api.getForms();
-      setForms(fetchedForms);
+      const { data, error } = await supabase.functions.invoke('get-jotform-forms');
       
-      toast({
-        title: "Formulários carregados",
-        description: `${fetchedForms.length} formulário(s) encontrado(s)`,
-      });
+      if (error) throw error;
+      
+      const fetchedForms: JotFormForm[] = data?.forms || [];
+      setForms(fetchedForms);
+      console.log(`Loaded ${fetchedForms.length} forms from JotForm`);
     } catch (error) {
+      console.error("Error fetching forms:", error);
       toast({
         title: "Erro",
-        description: "Falha ao buscar formulários",
+        description: "Falha ao buscar formulários. Verifique se o secret JOTFORM está configurado.",
         variant: "destructive",
       });
     } finally {
@@ -162,15 +87,24 @@ const Configuracoes = () => {
     }
   };
 
-  const handleToggleForm = (formId: string, enabled: boolean) => {
-    updateFormConfig(formId, { formId, enabled });
-    setFormsConfig(getFormsConfig());
+  const handleRefresh = async () => {
+    await checkConnection();
+    toast({
+      title: "Atualizado",
+      description: "Status da conexão atualizado",
+    });
+  };
+
+  const handleFormTypeChange = (formId: string, formType: FormType) => {
+    setFormTypeMappings(prev => ({
+      ...prev,
+      [formId]: formType
+    }));
+    saveFormMapping(formId, formType);
     
     toast({
-      title: enabled ? "Formulário habilitado" : "Formulário desabilitado",
-      description: enabled 
-        ? "Este formulário será sincronizado automaticamente" 
-        : "Este formulário não será mais sincronizado",
+      title: "Tipo salvo",
+      description: `Formulário configurado como tipo: ${formType}`,
     });
   };
 
@@ -179,36 +113,32 @@ const Configuracoes = () => {
     if (!formType) {
       toast({
         title: "Erro",
-        description: "Selecione o tipo de dados do formulário antes de sincronizar",
+        description: "Selecione um tipo para este formulário primeiro",
         variant: "destructive",
       });
       return;
     }
 
     setSyncingFormId(formId);
-    
     try {
       const result = await syncJotFormSubmissions(formId, formType);
-      
+
       if (result.success) {
-        // Update last sync time
-        const newConfig = formsConfig.map(c => 
-          c.formId === formId ? { ...c, lastSync: new Date().toISOString() } : c
-        );
-        setFormsConfig(newConfig);
-        updateFormConfig(formId, { enabled: true, lastSync: new Date().toISOString() });
-        
         toast({
-          title: "Sincronização concluída! ✅",
-          description: `${result.processed} de ${result.total} registros processados`,
+          title: "Sincronização concluída! 🎉",
+          description: `${result.processed || 0} de ${result.total || 0} registros processados`,
         });
       } else {
-        throw new Error(result.error || 'Erro desconhecido');
+        toast({
+          title: "Erro na sincronização",
+          description: result.error || "Erro desconhecido",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       toast({
-        title: "Erro na sincronização",
-        description: error instanceof Error ? error.message : "Não foi possível sincronizar o formulário",
+        title: "Erro",
+        description: "Falha ao sincronizar formulário",
         variant: "destructive",
       });
     } finally {
@@ -217,15 +147,12 @@ const Configuracoes = () => {
   };
 
   const handleSyncAll = async () => {
-    const enabledForms = forms.filter(form => {
-      const config = getFormConfig(form.id);
-      return config.enabled && formTypeMappings[form.id];
-    });
-
-    if (enabledForms.length === 0) {
+    const formsToSync = forms.filter(form => formTypeMappings[form.id]);
+    
+    if (formsToSync.length === 0) {
       toast({
-        title: "Nenhum formulário habilitado",
-        description: "Configure e habilite os formulários antes de sincronizar",
+        title: "Nenhum formulário configurado",
+        description: "Configure o tipo dos formulários antes de sincronizar",
         variant: "destructive",
       });
       return;
@@ -235,285 +162,159 @@ const Configuracoes = () => {
     let successCount = 0;
     let errorCount = 0;
 
-    for (const form of enabledForms) {
-      try {
+    try {
+      for (const form of formsToSync) {
         const formType = formTypeMappings[form.id];
-        const result = await syncJotFormSubmissions(form.id, formType);
-        
-        if (result.success) {
-          successCount++;
-          const newConfig = formsConfig.map(c => 
-            c.formId === form.id ? { ...c, lastSync: new Date().toISOString() } : c
-          );
-          setFormsConfig(newConfig);
-          updateFormConfig(form.id, { enabled: true, lastSync: new Date().toISOString() });
-        } else {
+        try {
+          const result = await syncJotFormSubmissions(form.id, formType);
+          if (result.success) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
           errorCount++;
+          console.error(`Erro ao sincronizar ${form.title}:`, error);
         }
-      } catch (error) {
-        errorCount++;
-        console.error(`Error syncing form ${form.id}:`, error);
       }
-    }
 
-    setIsSyncingAll(false);
-
-    if (successCount > 0) {
       toast({
-        title: "Sincronização concluída!",
-        description: `${successCount} formulário(s) sincronizado(s) com sucesso${errorCount > 0 ? `. ${errorCount} com erro(s)` : ''}`,
+        title: "Sincronização completa",
+        description: `${successCount} formulários sincronizados com sucesso. ${errorCount > 0 ? `${errorCount} com erro.` : ''}`,
       });
-    } else {
-      toast({
-        title: "Erro na sincronização",
-        description: "Não foi possível sincronizar nenhum formulário",
-        variant: "destructive",
-      });
+    } finally {
+      setIsSyncingAll(false);
     }
-  };
-
-  const handleDisconnect = () => {
-    clearApiKey();
-    setApiKey("");
-    setSavedApiKey(null);
-    setIsConnected(false);
-    setForms([]);
-    
-    toast({
-      title: "Desconectado",
-      description: "API Key removida com sucesso",
-    });
-  };
-
-  const handleFormTypeChange = (formId: string, formType: FormType) => {
-    const newMappings = { ...formTypeMappings, [formId]: formType };
-    setFormTypeMappings(newMappings);
-    saveFormMapping(formId, formType);
-    
-    toast({
-      title: "Tipo de formulário atualizado",
-      description: "Configure o tipo antes de sincronizar os dados",
-    });
-  };
-
-  const getFormConfig = (formId: string): FormConfig => {
-    return formsConfig.find(c => c.formId === formId) || { formId, enabled: false };
-  };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "Nunca";
-    const date = new Date(dateString);
-    return date.toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
-        <p className="text-muted-foreground mt-1">
-          Configure integrações e preferências do sistema
-        </p>
+      <div className="flex items-center gap-2">
+        <Settings className="h-8 w-8 text-primary" />
+        <h1 className="text-3xl font-bold">Configurações</h1>
       </div>
 
-      <Card className="shadow-card">
+      {/* JotForm Integration Card */}
+      <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Link2 className="h-5 w-5" />
-            Integração com JotForm
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary" />
+            <CardTitle>Integração com JotForm</CardTitle>
+          </div>
           <CardDescription>
-            Configure a conexão com sua conta JotForm para importar dados dos formulários
+            A conexão com JotForm é gerenciada através do secret JOTFORM configurado no backend
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="api-key">API Key do JotForm</Label>
-            <div className="flex gap-2">
-              <Input 
-                id="api-key" 
-                type="password" 
-                placeholder="Digite sua API Key"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                disabled={isConnected}
-                className="flex-1"
-              />
-              {isConnected && (
-                <Button 
-                  variant="outline" 
-                  onClick={handleDisconnect}
-                  className="shrink-0"
-                >
-                  Desconectar
-                </Button>
-              )}
+        <CardContent className="space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                {isConnected ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                ) : (
+                  <XCircle className="h-5 w-5 text-red-500" />
+                )}
+                <div>
+                  <p className="font-medium">
+                    Status da Conexão
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {isConnected ? 'Conectado ao JotForm' : 'Não conectado ao JotForm'}
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={handleRefresh}
+                disabled={isTestingConnection}
+                variant="outline"
+                size="sm"
+              >
+                {isTestingConnection ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Você pode encontrar sua API Key em{" "}
+              Configure o secret JOTFORM no painel de configuração do backend com sua API Key obtida em{" "}
               <a 
                 href="https://www.jotform.com/myaccount/api" 
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
               >
-                https://www.jotform.com/myaccount/api
+                JotForm API Settings
               </a>
             </p>
           </div>
-          
-          <div className="flex gap-2">
-            <Button 
-              onClick={handleSaveApiKey}
-              disabled={isConnected || !apiKey.trim()}
-              className="bg-gradient-primary"
-            >
-              <Key className="mr-2 h-4 w-4" />
-              Salvar API Key
-            </Button>
-            <Button 
-              variant="outline"
-              onClick={handleTestConnection}
-              disabled={isTestingConnection || isConnected || !apiKey.trim()}
-            >
-              {isTestingConnection ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Database className="mr-2 h-4 w-4" />
-              )}
-              Testar Conexão
-            </Button>
-          </div>
 
-          <div className="mt-6 rounded-lg border border-border bg-muted/30 p-4">
-            <div className="flex items-start gap-3">
-              {isConnected ? (
-                <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
-              ) : (
-                <XCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-              )}
-              <div>
-                <h4 className="font-medium text-sm text-foreground mb-1">Status da Conexão</h4>
-                <p className="text-sm text-muted-foreground">
-                  {isConnected 
-                    ? "Conectado com sucesso! Seus formulários estão listados abaixo." 
-                    : "Não conectado. Configure a API Key para começar a importar dados."
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Security Warning */}
-          <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 dark:border-yellow-900 dark:bg-yellow-950/30 p-4">
-            <div className="flex items-start gap-3">
-              <Settings className="h-5 w-5 text-yellow-600 dark:text-yellow-500 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-sm text-yellow-900 dark:text-yellow-100 mb-1">
-                  Aviso de Segurança
-                </h4>
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  Atualmente a API Key está armazenada localmente no navegador. Para produção, 
-                  recomendamos conectar o <strong>Lovable Cloud</strong> para armazenamento seguro de credenciais.
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Forms List */}
-      {isConnected && (
-        <Card className="shadow-card">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Formulários Disponíveis</CardTitle>
-                <CardDescription>
-                  Gerencie quais formulários serão sincronizados automaticamente
-                </CardDescription>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="default" 
-                  size="sm"
-                  onClick={handleSyncAll}
-                  disabled={isSyncingAll || isFetchingForms}
-                >
-                  {isSyncingAll ? (
-                    <>
+          {isConnected && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Formulários Disponíveis</h3>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={fetchForms}
+                    disabled={isFetchingForms}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isFetchingForms ? (
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Sincronizando...
-                    </>
-                  ) : (
-                    <>
+                    ) : (
                       <RefreshCw className="h-4 w-4 mr-2" />
-                      Sincronizar Todos
-                    </>
-                  )}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => savedApiKey && fetchForms(savedApiKey)}
-                  disabled={isFetchingForms}
-                >
-                  {isFetchingForms ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                </Button>
+                    )}
+                    Atualizar
+                  </Button>
+                  <Button
+                    onClick={handleSyncAll}
+                    disabled={isSyncingAll || forms.length === 0}
+                    size="sm"
+                  >
+                    {isSyncingAll ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    Sincronizar Todos
+                  </Button>
+                </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isFetchingForms ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : forms.length === 0 ? (
-              <div className="rounded-lg border border-border bg-muted/50 p-8 text-center">
-                <Database className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="font-semibold text-foreground mb-2">
-                  Nenhum formulário encontrado
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Não há formulários disponíveis em sua conta JotForm
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome do Formulário</TableHead>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Tipo de Dados</TableHead>
-                      <TableHead>Respostas</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Última Sincronização</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {forms.map((form) => {
-                      const config = getFormConfig(form.id);
-                      return (
+
+              {forms.length > 0 ? (
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Formulário</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Tipo</TableHead>
+                        <TableHead>Submissões</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {forms.map((form) => (
                         <TableRow key={form.id}>
-                          <TableCell className="font-medium">{form.title}</TableCell>
-                          <TableCell className="font-mono text-xs text-muted-foreground">
-                            {form.id}
+                          <TableCell className="font-medium">
+                            {form.title}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                form.status === "ENABLED"
+                                  ? "default"
+                                  : "secondary"
+                              }
+                            >
+                              {form.status}
+                            </Badge>
                           </TableCell>
                           <TableCell>
                             <Select
                               value={formTypeMappings[form.id] || ""}
-                              onValueChange={(value) => handleFormTypeChange(form.id, value as FormType)}
+                              onValueChange={(value) =>
+                                handleFormTypeChange(form.id, value as FormType)
+                              }
                             >
                               <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="Selecione o tipo" />
@@ -521,58 +322,108 @@ const Configuracoes = () => {
                               <SelectContent>
                                 <SelectItem value="evento">Evento</SelectItem>
                                 <SelectItem value="venda">Venda</SelectItem>
-                                <SelectItem value="profissional">Profissional</SelectItem>
-                                <SelectItem value="pagamento">Pagamento</SelectItem>
-                                <SelectItem value="satisfacao">Satisfação</SelectItem>
+                                <SelectItem value="profissional">
+                                  Profissional
+                                </SelectItem>
+                                <SelectItem value="pagamento">
+                                  Pagamento
+                                </SelectItem>
+                                <SelectItem value="satisfacao">
+                                  Satisfação
+                                </SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="secondary">
-                              {form.count} respostas
+                            <Badge variant="outline">
+                              {form.count} total
                             </Badge>
+                            {form.new !== "0" && (
+                              <Badge variant="secondary" className="ml-2">
+                                {form.new} novas
+                              </Badge>
+                            )}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                checked={config.enabled}
-                                onCheckedChange={(checked) => 
-                                  handleToggleForm(form.id, checked)
-                                }
-                              />
-                              <span className="text-sm text-muted-foreground">
-                                {config.enabled ? "Habilitado" : "Desabilitado"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatDate(config.lastSync)}
-                          </TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
                             <Button
+                              onClick={() => handleSyncForm(form.id)}
+                              disabled={
+                                syncingFormId === form.id ||
+                                !formTypeMappings[form.id]
+                              }
                               size="sm"
                               variant="outline"
-                              onClick={() => handleSyncForm(form.id)}
-                              disabled={syncingFormId === form.id || !config.enabled || !formTypeMappings[form.id]}
-                              title={!formTypeMappings[form.id] ? "Selecione o tipo de dados primeiro" : ""}
                             >
                               {syncingFormId === form.id ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
-                                <RefreshCw className="h-4 w-4" />
+                                "Sincronizar"
                               )}
                             </Button>
                           </TableCell>
                         </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  {isFetchingForms ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <p>Buscando formulários...</p>
+                    </div>
+                  ) : (
+                    <p>Não há formulários disponíveis em sua conta JotForm</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Instructions Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Como configurar a integração</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <h4 className="font-semibold">1. Configure o secret JOTFORM</h4>
+            <p className="text-sm text-muted-foreground">
+              Acesse o painel de configuração do backend e configure o secret JOTFORM com sua API Key do JotForm.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold">2. Obtenha sua API Key</h4>
+            <p className="text-sm text-muted-foreground">
+              Acesse{" "}
+              <a
+                href="https://www.jotform.com/myaccount/api"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                JotForm API Settings
+              </a>{" "}
+              para obter sua API Key.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold">3. Configure os tipos de formulários</h4>
+            <p className="text-sm text-muted-foreground">
+              Para cada formulário, selecione o tipo correspondente (Evento, Venda, Profissional, Pagamento ou Satisfação).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold">4. Sincronize os dados</h4>
+            <p className="text-sm text-muted-foreground">
+              Clique em "Sincronizar" para importar os dados de cada formulário ou use "Sincronizar Todos" para importar todos de uma vez.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -26,20 +26,6 @@ const Dashboard = () => {
   const { data: eventos, isLoading: isLoadingEventos } = useEventos();
   const { data: vendas, isLoading: isLoadingVendas } = useVendas();
 
-  // Show loading state while syncing or loading data
-  if (isLoadingEventos || isLoadingVendas || isSyncing) {
-    return (
-      <div className="flex h-screen items-center justify-center flex-col gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        {isSyncing && (
-          <p className="text-sm text-muted-foreground">
-            Sincronizando dados do JotForm...
-          </p>
-        )}
-      </div>
-    );
-  }
-
   // Filtrar dados baseado no período e tipo de filtro
   const filteredEventos = useMemo(() => {
     if (!eventos) return [];
@@ -162,6 +148,20 @@ const Dashboard = () => {
       gradient: "from-green-500 to-emerald-400",
     },
   ];
+
+  // Show loading state while syncing or loading data
+  if (isLoadingEventos || isLoadingVendas || isSyncing) {
+    return (
+      <div className="flex h-screen items-center justify-center flex-col gap-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        {isSyncing && (
+          <p className="text-sm text-muted-foreground">
+            Sincronizando dados do JotForm...
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

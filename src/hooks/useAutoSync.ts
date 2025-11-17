@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { syncJotFormSubmissions, FormType } from '@/lib/jotformSync';
-import { getApiKey } from '@/lib/jotform';
 
 const FORM_IDS = {
   evento: '243466215987670',
   venda: '242286762741159',
-  profissional: '243466215987670', // Pode ser o mesmo que evento
+  profissional: '243466215987670',
 };
 
 export const useAutoSync = () => {
@@ -14,15 +13,12 @@ export const useAutoSync = () => {
 
   useEffect(() => {
     const syncAll = async () => {
-      const apiKey = getApiKey();
-      if (!apiKey) return;
-
       // Verifica se já sincronizou nas últimas 5 minutos
       const lastSyncTime = localStorage.getItem('lastAutoSync');
       if (lastSyncTime) {
         const timeSinceLastSync = Date.now() - parseInt(lastSyncTime);
         if (timeSinceLastSync < 5 * 60 * 1000) {
-          return; // Não sincronizar novamente
+          return;
         }
       }
 

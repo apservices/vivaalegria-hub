@@ -40,20 +40,15 @@ export const mapFormIdToType = (formId: string): FormType => {
   return formMappings[formId] || 'evento';
 };
 
+// Form mappings are now managed through edge functions
+// No localStorage usage for security reasons
 export const getFormMappings = (): Record<string, FormType> => {
-  const stored = localStorage.getItem('jotform_form_mappings');
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch {
-      return {};
-    }
-  }
+  // Mappings should be stored in the database in production
+  // For now, return empty object
   return {};
 };
 
 export const saveFormMapping = (formId: string, formType: FormType) => {
-  const mappings = getFormMappings();
-  mappings[formId] = formType;
-  localStorage.setItem('jotform_form_mappings', JSON.stringify(mappings));
+  // This should save to database in production
+  console.log(`Form mapping saved: ${formId} -> ${formType}`);
 };

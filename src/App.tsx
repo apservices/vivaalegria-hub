@@ -12,6 +12,8 @@ import Financeiro from "./pages/Financeiro";
 import Eventos from "./pages/Eventos";
 import Profissionais from "./pages/Profissionais";
 import Satisfacao from "./pages/Satisfacao";
+import Reclamacoes from "./pages/Reclamacoes";
+import ControleConferencia from "./pages/ControleConferencia";
 import Configuracoes from "./pages/Configuracoes";
 import Ajuda from "./pages/Ajuda";
 import Login from "./pages/Login";
@@ -35,6 +37,8 @@ const App = () => (
                 <Route path="/eventos" element={<Eventos />} />
                 <Route path="/profissionais" element={<Profissionais />} />
                 <Route path="/satisfacao" element={<Satisfacao />} />
+                <Route path="/reclamacoes" element={<Reclamacoes />} />
+                <Route path="/controle-conferencia" element={<ControleConferencia />} />
                 <Route path="/configuracoes" element={<Configuracoes />} />
                 <Route path="/ajuda" element={<Ajuda />} />
               </Route>

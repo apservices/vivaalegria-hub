@@ -6,7 +6,9 @@ import {
   Heart, 
   Settings, 
   HelpCircle,
-  Sparkles
+  Sparkles,
+  AlertTriangle,
+  PackageCheck
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -30,6 +32,8 @@ const menuItems = [
   { title: "Eventos", url: "/eventos", icon: Calendar },
   { title: "Profissionais", url: "/profissionais", icon: Users },
   { title: "Satisfação", url: "/satisfacao", icon: Heart },
+  { title: "Reclamações", url: "/reclamacoes", icon: AlertTriangle },
+  { title: "Controle/Conferência", url: "/controle-conferencia", icon: PackageCheck },
 ];
 
 const settingsItems = [
@@ -51,7 +55,7 @@ export function AppSidebar() {
           </div>
           {open && (
             <div className="flex flex-col">
-              <span className="text-lg font-bold text-sidebar-foreground">VivaAlegria</span>
+              <span className="text-lg font-bold text-sidebar-foreground">Vivalegria</span>
               <span className="text-xs text-muted-foreground">Dashboard</span>
             </div>
           )}

@@ -149,26 +149,24 @@ const Dashboard = () => {
     },
   ];
 
-  // Show loading state while syncing or loading data
-  if (isLoadingEventos || isLoadingVendas || isSyncing) {
-    return (
-      <div className="flex h-screen items-center justify-center flex-col gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        {isSyncing && (
-          <p className="text-sm text-muted-foreground">
-            Sincronizando dados do JotForm...
-          </p>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
+      {(isLoadingEventos || isLoadingVendas || isSyncing) && (
+        <div className="flex items-center justify-center p-12 bg-muted/50 rounded-lg">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mr-3" />
+          {isSyncing && (
+            <p className="text-sm text-muted-foreground">
+              Sincronizando dados do JotForm...
+            </p>
+          )}
+          {!isSyncing && <p className="text-sm text-muted-foreground">Carregando dados...</p>}
+        </div>
+      )}
+      
       <div>
         <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Visão geral dos principais indicadores da VivaAlegria
+          Visão geral dos principais indicadores da Vivalegria
         </p>
       </div>
 

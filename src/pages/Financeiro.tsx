@@ -31,19 +31,6 @@ const Financeiro = () => {
   const { data: eventos, isLoading: isLoadingEventos } = useEventos();
   const { data: vendas, isLoading: isLoadingVendas } = useVendas();
 
-  if (isLoadingEventos || isLoadingVendas || isSyncing) {
-    return (
-      <div className="flex h-screen items-center justify-center flex-col gap-4">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        {isSyncing && (
-          <p className="text-sm text-muted-foreground">
-            Sincronizando dados do JotForm...
-          </p>
-        )}
-      </div>
-    );
-  }
-
   // Filtrar vendas
   const filteredVendas = useMemo(() => {
     if (!vendas) return [];
@@ -192,6 +179,18 @@ const Financeiro = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {(isLoadingEventos || isLoadingVendas || isSyncing) && (
+        <div className="flex items-center justify-center p-12 bg-muted/50 rounded-lg">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mr-3" />
+          {isSyncing && (
+            <p className="text-sm text-muted-foreground">
+              Sincronizando dados do JotForm...
+            </p>
+          )}
+          {!isSyncing && <p className="text-sm text-muted-foreground">Carregando dados...</p>}
+        </div>
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Financeiro</h1>

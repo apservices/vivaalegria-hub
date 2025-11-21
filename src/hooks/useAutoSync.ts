@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { syncJotFormSubmissions, FormType } from '@/lib/jotformSync';
 
 const FORM_IDS = {
@@ -8,6 +9,7 @@ const FORM_IDS = {
 };
 
 export const useAutoSync = () => {
+  const queryClient = useQueryClient();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
@@ -30,6 +32,7 @@ export const useAutoSync = () => {
         );
 
         await Promise.all(syncPromises);
+        await queryClient.invalidateQueries();
         
         const now = Date.now();
         localStorage.setItem('lastAutoSync', now.toString());

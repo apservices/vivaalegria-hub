@@ -4,30 +4,52 @@ import { syncAllJotForms } from '@/lib/jotformSync';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
+const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+let globalSyncPromise: Promise<Awaited<ReturnType<typeof syncAllJotForms>>> | null = null;
+let globalLastSyncTime: number | null = null;
+
 export const useAutoSync = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { user, loading } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
-  const canSync = useMemo(() => isAdmin !== false, [isAdmin]);
+  const canSync = useMemo(() => !!user && !loading, [user, loading]);
 
   useEffect(() => {
     const syncAll = async () => {
       if (!canSync) return;
 
-      // Verifica se já sincronizou nas últimas 5 minutos
-      const lastSyncTime = localStorage.getItem('lastAutoSync');
-      if (lastSyncTime) {
-        const timeSinceLastSync = Date.now() - parseInt(lastSyncTime);
-        if (timeSinceLastSync < 5 * 60 * 1000) {
-          return;
+      const persistedLastSync = parseInt(localStorage.getItem('lastAutoSync') || '0');
+      const effectiveLastSync = Math.max(globalLastSyncTime ?? 0, persistedLastSync || 0) || null;
+
+      if (effectiveLastSync && Date.now() - effectiveLastSync < SYNC_INTERVAL_MS) {
+        setLastSync(new Date(effectiveLastSync));
+        return;
+      }
+
+      // Avoid triggering parallel syncs across multiple hook consumers
+      if (globalSyncPromise) {
+        setIsSyncing(true);
+        try {
+          await globalSyncPromise;
+          const updatedTime = globalLastSyncTime ?? effectiveLastSync;
+          setLastSync(updatedTime ? new Date(updatedTime) : null);
+        } finally {
+          setIsSyncing(false);
         }
+        return;
       }
 
       setIsSyncing(true);
-      try {
+      globalSyncPromise = (async () => {
         const result = await syncAllJotForms();
+        return result;
+      })();
+
+      try {
+        const result = await globalSyncPromise;
 
         if (!result.success) {
           throw new Error(result.error || 'Falha ao sincronizar dados do JotForm');
@@ -43,6 +65,7 @@ export const useAutoSync = () => {
         await queryClient.invalidateQueries();
 
         const now = Date.now();
+        globalLastSyncTime = now;
         localStorage.setItem('lastAutoSync', now.toString());
         setLastSync(new Date(now));
       } catch (error) {
@@ -54,6 +77,7 @@ export const useAutoSync = () => {
         });
       } finally {
         setIsSyncing(false);
+        globalSyncPromise = null;
       }
     };
 

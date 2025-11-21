@@ -9,6 +9,12 @@ export interface SyncResult {
   error?: string;
 }
 
+export interface SyncAllResult {
+  success: boolean;
+  stats?: Record<string, number>;
+  error?: string;
+}
+
 export const syncJotFormSubmissions = async (
   formId: string,
   formType: FormType
@@ -26,6 +32,25 @@ export const syncJotFormSubmissions = async (
     return data as SyncResult;
   } catch (error) {
     console.error('Error syncing JotForm submissions:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};
+
+export const syncAllJotForms = async (): Promise<SyncAllResult> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('sync-all-jotform');
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      stats: data?.stats || {},
+    };
+  } catch (error) {
+    console.error('Error syncing all JotForm submissions:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

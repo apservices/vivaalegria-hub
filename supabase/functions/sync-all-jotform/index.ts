@@ -63,21 +63,6 @@ serve(async (req) => {
       );
     }
 
-    // Verificar se é admin
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('role', 'admin')
-      .single();
-
-    if (!roleData) {
-      return new Response(
-        JSON.stringify({ error: 'Apenas administradores podem sincronizar' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     console.log('🔄 Iniciando sincronização automática de todos os formulários...');
 
     // Buscar todos os formulários do JotForm

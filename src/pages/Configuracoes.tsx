@@ -3,11 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Settings, Database, CheckCircle2, XCircle, RefreshCw, Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const Configuracoes = () => {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [isConnected, setIsConnected] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
@@ -47,6 +49,8 @@ const Configuracoes = () => {
         title: "✅ Sincronização Completa!",
         description: `${total} registros | Vendas: ${stats.vendas || 0} | Eventos: ${stats.eventos || 0} | Profissionais: ${stats.profissionais || 0} | Satisfação: ${stats.satisfacao || 0}`,
       });
+
+      await queryClient.invalidateQueries();
     } catch (error) {
       toast({
         title: "Erro",

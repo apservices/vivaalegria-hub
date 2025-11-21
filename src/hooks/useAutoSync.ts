@@ -1,20 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { syncJotFormSubmissions, FormType } from '@/lib/jotformSync';
-
-const FORM_IDS = {
-  evento: '243466215987670',
-  venda: '242286762741159',
-  profissional: '243466215987670',
-};
+import { syncAllJotForms } from '@/lib/jotformSync';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const useAutoSync = () => {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { isAdmin } = useAuth();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  const canSync = useMemo(() => isAdmin !== false, [isAdmin]);
 
   useEffect(() => {
     const syncAll = async () => {
+      if (!canSync) return;
+
       // Verifica se já sincronizou nas últimas 5 minutos
       const lastSyncTime = localStorage.getItem('lastAutoSync');
       if (lastSyncTime) {
@@ -26,26 +27,38 @@ export const useAutoSync = () => {
 
       setIsSyncing(true);
       try {
-        // Sincroniza todos os formulários em paralelo
-        const syncPromises = Object.entries(FORM_IDS).map(([type, formId]) =>
-          syncJotFormSubmissions(formId, type as FormType)
-        );
+        const result = await syncAllJotForms();
 
-        await Promise.all(syncPromises);
+        if (!result.success) {
+          throw new Error(result.error || 'Falha ao sincronizar dados do JotForm');
+        }
+
+        const total = Object.values(result.stats || {}).reduce((sum, value) => sum + (value || 0), 0);
+
+        toast({
+          title: 'Dados atualizados',
+          description: `${total} registros sincronizados automaticamente dos formulários.`
+        });
+
         await queryClient.invalidateQueries();
-        
+
         const now = Date.now();
         localStorage.setItem('lastAutoSync', now.toString());
         setLastSync(new Date(now));
       } catch (error) {
         console.error('Erro na sincronização automática:', error);
+        toast({
+          title: 'Erro ao sincronizar formulários',
+          description: error instanceof Error ? error.message : 'Não foi possível atualizar os dados dos formulários.',
+          variant: 'destructive'
+        });
       } finally {
         setIsSyncing(false);
       }
     };
 
     syncAll();
-  }, []);
+  }, [canSync, queryClient, toast]);
 
   return { isSyncing, lastSync };
 };
